@@ -1,0 +1,15 @@
+<File>
+<Include name="string" />
+<Namespace name="a.b.c">
+    <Record name="BaseRecord">
+        <Field name="field1" type="int"/>
+        <Field name="field2" type="std::string"/>
+    </Record>
+    <Record name="DerivedRecord" extends="BaseRecord">
+        <Field name="field3" type="int"/>
+        <Field name="field4" type="const char*"/>
+        <Field name="field5" type="void* const"/>
+    </Record>
+
+</Namespace>
+</File>
