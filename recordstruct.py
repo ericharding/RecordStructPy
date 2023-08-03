@@ -44,7 +44,7 @@ class Field(NamedTuple):
 
 class Record(NamedTuple):
     name: str
-    base: str
+    base: "Record"
     fields: list[Field]
 
 class Namespace(NamedTuple):
@@ -54,7 +54,6 @@ class Namespace(NamedTuple):
 class File(NamedTuple):
     includes: list[str]
     namespaces: list[Namespace]
-    recordsByName: dict[str, Record]
 
 class ProgramOptions(NamedTuple):
     inputFormat: str
@@ -63,7 +62,8 @@ class ProgramOptions(NamedTuple):
 
 def parseXml(inputPath : str):
     import xml.etree.ElementTree as ET
-    file = File([], [], {})
+    recordsByName = {}
+    file = File([], [])
     tree = ET.parse(inputPath)
     root = tree.getroot()
     for i in root.findall("Include"):
@@ -71,7 +71,9 @@ def parseXml(inputPath : str):
     for n in root.findall("Namespace"):
         namespace = Namespace(n.attrib["name"], [])
         for r in n.findall("Record"):
-            record = Record(r.attrib["name"], r.get("extends", None), [])
+            baseRecord = recordsByName.get(r.get("extends", None), None)
+            record = Record(r.attrib["name"], baseRecord, [])
+            recordsByName[record.name] = record
             for f in r.findall("Field"):
                 record.fields.append(Field(f.attrib["name"], f.attrib["type"]))
             namespace.records.append(record)
@@ -82,29 +84,23 @@ def parseXml(inputPath : str):
 def parseCpp(inputPath : str):
     raise NotImplementedError
 
-def buildRecordsByName(file : File):
-    for n in file.namespaces:
-        for r in n.records:
-            if r.name in file.recordsByName:
-                raise ValueError(f"Duplicate record name: {r.name}")
-            file.recordsByName[r.name] = r
-
 def parseInput(inputPath : str, inputFormat : str):
     if (inputFormat == "xml"):
         return parseXml(inputPath)
     else:
         return parseCpp(inputPath)
 
-def getAllFields(record : Record, recordsByName : dict[str,Record]):
+def getAllFields(record : Record):
+    if record is None:
+        return []
     if (record.base):
-        base = getAllFields(recordsByName[record.base], recordsByName)
-        return base.fields + record.fields
+        return getAllFields(record.base) + record.fields
     else:
         return record.fields
 
-def printConstructor(record : Record, recordsByName : dict[str, Record], out : File):
-    allFields = getAllFields(record, recordsByName)
-    baseFields = getAllFields(recordsByName[record.base], recordsByName) if record.base else []
+def printConstructor(record : Record, out : File):
+    allFields = getAllFields(record)
+    baseFields = getAllFields(record.base)
     # record(field1:type, field2:type, field3:type) : base(field1, field2), field3(field3) {}
     print(f"    {record.name}(", end="", file=out)
     allFieldsWithType = [f"{f.name}:{f.type}" for f in allFields]
@@ -127,18 +123,17 @@ def printCpp(parseTree : File, out : File):
         print(f"namespace {n.name} {{", file=out)
         for r in n.records:
             if (r.base):
-                print(f"struct {r.name} : public {r.base} {{", file=out)
+                print(f"struct {r.name} : public {r.base.name} {{", file=out)
             else:
                 print(f"struct {r.name} {{", file=out)
             for f in r.fields:
                 print(f"    {f.type} {f.name};", file=out)
-            printConstructor(r, parseTree.recordsByName, out)
+            printConstructor(r, out)
             print("};", file=out)
         print("}", file=out)
 
 def main(options : ProgramOptions):
     parseTree = parseInput(options.inputPath, options.inputFormat)
-    buildRecordsByName(parseTree)
     printCpp(parseTree, sys.stdout)
 
 
