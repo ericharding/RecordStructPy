@@ -95,6 +95,31 @@ def parseInput(inputPath : str, inputFormat : str):
     else:
         return parseCpp(inputPath)
 
+def getAllFields(record : Record, recordsByName : dict[str,Record]):
+    if (record.base):
+        base = getAllFields(recordsByName[record.base], recordsByName)
+        return base.fields + record.fields
+    else:
+        return record.fields
+
+def printConstructor(record : Record, recordsByName : dict[str, Record], out : File):
+    allFields = getAllFields(record, recordsByName)
+    baseFields = getAllFields(recordsByName[record.base], recordsByName) if record.base else []
+    # record(field1:type, field2:type, field3:type) : base(field1, field2), field3(field3) {}
+    print(f"    {record.name}(", end="", file=out)
+    allFieldsWithType = [f"{f.name}:{f.type}" for f in allFields]
+    print(", ".join(allFieldsWithType), end="", file=out)
+    print(") : ", end="", file=out)
+    baseNames = [f.name for f in baseFields]
+    remainingNames = [f.name for f in allFields if f.name not in baseNames]
+    if (record.base):
+        print(f"{record.base.name}({', '.join(baseNames)})", end="", file=out)
+        if (len(remainingNames) > 0):
+            print(", ", end="", file=out)
+    print(", ".join([f"{n}({n})" for n in remainingNames]), end="", file=out)
+    print(" {}", file=out)
+
+
 def printCpp(parseTree : File, out : File):
     for i in parseTree.includes:
         print(f"#include <{i}>", file=out)
@@ -107,6 +132,7 @@ def printCpp(parseTree : File, out : File):
                 print(f"struct {r.name} {{", file=out)
             for f in r.fields:
                 print(f"    {f.type} {f.name};", file=out)
+            printConstructor(r, parseTree.recordsByName, out)
             print("};", file=out)
         print("}", file=out)
 
